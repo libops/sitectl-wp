@@ -7,7 +7,6 @@ const (
 	createBranch = "main"
 	pluginName   = "wp"
 	defaultPath  = "./wp"
-	displayName  = "WordPress"
 )
 
 func createDefinition() plugin.CreateSpec {
@@ -34,11 +33,11 @@ func RegisterCommands(s *plugin.SDK) {
 		RequiredServices: []string{"wp"},
 		Reason:           "wp service",
 	})
-	s.RegisterStandardComposeTemplate(createDefinition(), plugin.StandardComposeTemplateOptions{
+	s.RegisterComposeTemplateCreateRunner(createDefinition(), plugin.ComposeTemplateCreateOptions{
 		DefaultPath:   defaultPath,
 		DefaultPlugin: pluginName,
 		ReadyMessage:  "WordPress is ready for use through sitectl.",
-		DisplayName:   displayName,
 	})
+	s.RegisterHealthcheckRunner(wordpressHealthcheckRunner{})
 	registerWordPressCommands(s)
 }
