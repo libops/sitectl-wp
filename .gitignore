@@ -5,8 +5,8 @@ bin/
 *.dll
 *.so
 *.dylib
-sitectl-isle
-sitectl-isle-*
+sitectl-wp
+sitectl-wp-*
 
 # Test binary, built with `go test -c`
 *.test
@@ -39,5 +39,4 @@ temp/
 # Build artifacts
 dist/
 release/
-sitectl-wp
 .cache

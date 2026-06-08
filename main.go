@@ -20,6 +20,7 @@ func main() {
 		Description:  "WordPress helpers",
 		Author:       "libops",
 		TemplateRepo: "https://github.com/libops/wp",
+		Includes:     cmd.IncludedPlugins(),
 	})
 
 	cmd.RegisterCommands(sdk)
