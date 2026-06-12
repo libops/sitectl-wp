@@ -47,6 +47,7 @@ brews:
       name: homebrew
     dependencies:
       - name: "libops/homebrew/sitectl"
+      - name: "libops/homebrew/sitectl-triplet"
 nfpms:
   - id: sitectl-wp
     package_name: sitectl-wp

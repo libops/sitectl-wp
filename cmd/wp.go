@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-
 	sitectlplugin "github.com/libops/sitectl/pkg/plugin"
 	"github.com/spf13/cobra"
 )
@@ -115,26 +113,6 @@ func wpDBCommand(s *sitectlplugin.SDK) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runWPCLI(s, cmd, "core", "update-db")
-		},
-	})
-	root.AddCommand(&cobra.Command{
-		Use:   "export [PATH]",
-		Short: "Export the WordPress database through the template Makefile",
-		Args:  cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			path := "/tmp/wp.sql"
-			if len(args) == 1 {
-				path = args[0]
-			}
-			return s.RunActiveComposeProjectCommand(cmd, fmt.Sprintf("make db-export DB_DUMP=%s", sitectlplugin.ShellQuote(path)))
-		},
-	})
-	root.AddCommand(&cobra.Command{
-		Use:   "import PATH",
-		Short: "Import the WordPress database through the template Makefile",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return s.RunActiveComposeProjectCommand(cmd, fmt.Sprintf("make db-import DB_DUMP=%s", sitectlplugin.ShellQuote(args[0])))
 		},
 	})
 	return root
