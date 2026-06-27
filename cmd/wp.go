@@ -1,6 +1,10 @@
 package cmd
 
 import (
+	"fmt"
+	"path/filepath"
+	"strings"
+
 	sitectlplugin "github.com/libops/sitectl/pkg/plugin"
 	"github.com/spf13/cobra"
 )
@@ -8,6 +12,7 @@ import (
 const (
 	wordpressService = "wp"
 	wordpressPath    = "/var/www/bedrock/web/wp"
+	wordpressTmpDir  = "/tmp"
 )
 
 func registerWordPressCommands(s *sitectlplugin.SDK) {
@@ -110,9 +115,36 @@ func wpDBCommand(s *sitectlplugin.SDK) *cobra.Command {
 	root.AddCommand(&cobra.Command{
 		Use:   "update",
 		Short: "Run WordPress database updates",
-		Args:  cobra.NoArgs,
+		Aliases: []string{
+			"update-db",
+		},
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runWPCLI(s, cmd, "core", "update-db")
+		},
+	})
+	root.AddCommand(&cobra.Command{
+		Use:   "export PATH",
+		Short: "Export the WordPress database to a local path",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			commands, err := wordpressDBExportCommands(args[0])
+			if err != nil {
+				return err
+			}
+			return s.RunActiveComposeProjectCommandList(cmd, commands)
+		},
+	})
+	root.AddCommand(&cobra.Command{
+		Use:   "import PATH",
+		Short: "Import a local SQL dump into the WordPress database",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			commands, err := wordpressDBImportCommands(args[0])
+			if err != nil {
+				return err
+			}
+			return s.RunActiveComposeProjectCommandList(cmd, commands)
 		},
 	})
 	return root
@@ -136,6 +168,52 @@ func runWPCLI(s *sitectlplugin.SDK, cmd *cobra.Command, args ...string) error {
 	cliArgs := []string{"wp", "--allow-root", "--path=" + wordpressPath}
 	cliArgs = append(cliArgs, args...)
 	return runWordPressExec(s, cmd, cliArgs...)
+}
+
+func wordpressDBExportCommands(localPath string) ([]string, error) {
+	localPath, localDir, remotePath, err := wordpressDBPaths(localPath)
+	if err != nil {
+		return nil, err
+	}
+	return []string{
+		sitectlplugin.ShellJoin([]string{"mkdir", "-p", localDir}),
+		wordpressWPCLICommand("db", "export", remotePath),
+		sitectlplugin.ShellJoin([]string{"docker", "compose", "cp", wordpressService + ":" + remotePath, localPath}),
+	}, nil
+}
+
+func wordpressDBImportCommands(localPath string) ([]string, error) {
+	localPath, _, remotePath, err := wordpressDBPaths(localPath)
+	if err != nil {
+		return nil, err
+	}
+	return []string{
+		sitectlplugin.ShellJoin([]string{"test", "-f", localPath}),
+		sitectlplugin.ShellJoin([]string{"docker", "compose", "cp", localPath, wordpressService + ":" + remotePath}),
+		wordpressWPCLICommand("db", "import", remotePath),
+	}, nil
+}
+
+func wordpressDBPaths(localPath string) (string, string, string, error) {
+	localPath = strings.TrimSpace(localPath)
+	if localPath == "" {
+		return "", "", "", fmt.Errorf("path is required")
+	}
+	base := filepath.Base(localPath)
+	if base == "" || base == "." || base == "/" {
+		return "", "", "", fmt.Errorf("path must include a file name")
+	}
+	localDir := filepath.Dir(localPath)
+	if strings.TrimSpace(localDir) == "" {
+		localDir = "."
+	}
+	return localPath, localDir, filepath.Join(wordpressTmpDir, base), nil
+}
+
+func wordpressWPCLICommand(args ...string) string {
+	cliArgs := []string{"wp", "--allow-root", "--path=" + wordpressPath}
+	cliArgs = append(cliArgs, args...)
+	return sitectlplugin.DockerComposeExecCommand(wordpressService, cliArgs...)
 }
 
 func runWordPressExec(s *sitectlplugin.SDK, cmd *cobra.Command, args ...string) error {
