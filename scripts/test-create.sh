@@ -75,34 +75,34 @@ create_site() {
 		--type local \
 		--checkout-source template \
 		--default-context \
-		--setup-only \
 		"${extra_args[@]}"
-}
-
-run_make_target() {
-	local target="$1"
-	if ! (
-		cd "${SITE_DIR}" &&
-			make "${target}"
-	); then
-		(
-			cd "${SITE_DIR}" &&
-				docker compose ps -a || true
-		)
-		exit 1
-	fi
 }
 
 run_healthcheck() {
 	HOME="${SITECTL_HOME}" sitectl healthcheck
 }
 
+run_database_roundtrip() {
+	local dump="${TMP_DIR}/wordpress.sql"
+	HOME="${SITECTL_HOME}" sitectl wp db export "${dump}"
+	test -s "${dump}"
+
+	HOME="${SITECTL_HOME}" sitectl wp cli db reset --yes
+	if HOME="${SITECTL_HOME}" sitectl wp cli core is-installed; then
+		echo "expected WordPress install check to fail after database reset" >&2
+		exit 1
+	fi
+
+	HOME="${SITECTL_HOME}" sitectl wp db import "${dump}"
+	HOME="${SITECTL_HOME}" sitectl wp cli core is-installed
+	run_healthcheck
+}
+
 main() {
 	build_plugin
 	create_site
-	run_make_target init
-	run_make_target up
 	run_healthcheck
+	run_database_roundtrip
 }
 
 main "$@"
