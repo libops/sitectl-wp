@@ -47,6 +47,10 @@ func createDefinition() plugin.CreateSpec {
 			{Path: "secrets/WORDPRESS_LOGGED_IN_SALT"},
 			{Path: "secrets/WORDPRESS_NONCE_SALT"},
 		},
+		InitVolumes: []plugin.InitVolume{
+			{Name: "mariadb-data"},
+			{Name: "wordpress-uploads"},
+		},
 		DockerComposeUp: []string{
 			"docker compose up --remove-orphans -d",
 		},
