@@ -54,8 +54,16 @@ func createDefinition() plugin.CreateSpec {
 		DockerComposeUp: []string{
 			"docker compose up --remove-orphans -d",
 		},
-		DockerComposeDown:    []string{"docker compose down"},
-		DockerComposeRollout: []string{"./scripts/rollout.sh"},
+		DockerComposeDown: []string{"docker compose down"},
+		DockerComposeRollout: []string{
+			"docker compose pull --ignore-buildable --quiet || docker compose pull --ignore-buildable || true",
+			"docker compose build --pull",
+			"docker compose run --rm init",
+			"docker compose up --remove-orphans --wait --pull missing --quiet-pull -d",
+			"docker compose exec -T wp wp --allow-root --path=/var/www/bedrock/web/wp core update-db || echo \"WordPress database update skipped or failed\"",
+			"docker compose exec -T wp wp --allow-root --path=/var/www/bedrock/web/wp cache flush || true",
+			"docker compose up --remove-orphans --wait --pull missing --quiet-pull -d",
+		},
 	}
 }
 
