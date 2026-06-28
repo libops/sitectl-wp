@@ -71,7 +71,7 @@ func RegisterCommands(s *plugin.SDK) {
 		ReadyMessage:  "WordPress is ready for use through sitectl.",
 	})
 	registerApplicationComponents(s, "WordPress", "wp")
-	s.RegisterHealthcheckRunner(wordpressHealthcheckRunner{})
+	s.RegisterHealthcheckRunner(wordpressHealthcheckRunner)
 	registerWordPressCommands(s)
 }
 
