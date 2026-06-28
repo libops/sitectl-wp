@@ -1,6 +1,6 @@
 # sitectl-wp
 
-`sitectl-wp` adds WordPress create metadata, WP-CLI helpers, Composer commands, plugin and theme maintenance, lifecycle operations, database helpers, validation, and health checks to [`sitectl`](https://sitectl.libops.io). It works with the [LibOps WordPress template](https://github.com/libops/wp).
+`sitectl-wp` simplifies the creation and operation of repositories created using the [LibOps WordPress template](https://github.com/libops/wp). It provides sitectl commands for WP-CLI, Composer, plugin and theme maintenance, database work, validation, and health checks.
 
 Documentation: https://sitectl.libops.io/plugins/wordpress
 
