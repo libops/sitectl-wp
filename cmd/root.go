@@ -84,11 +84,18 @@ func RegisterCommands(s *plugin.SDK) {
 }
 
 func registerApplicationComponents(s *plugin.SDK, displayName, appService string) {
-	reverseProxy, err := coretraefik.ReverseProxy(coretraefik.ReverseProxyOptions{AppService: appService})
-	if err != nil {
-		panic(err)
-	}
-	uploadLimits, err := coretraefik.UploadLimits(coretraefik.UploadLimitsOptions{AppService: appService})
+	ingress, err := coretraefik.Ingress(coretraefik.IngressOptions{
+		AppService:      appService,
+		HTTPEntrypoint:  "web",
+		HTTPSEntrypoint: "websecure",
+		ServiceEnvTemplates: map[string]map[string]string{
+			appService: {
+				"WORDPRESS_ENABLE_HTTPS": "{https_enabled}",
+				"WORDPRESS_HOME":         "{base_url}",
+				"WORDPRESS_SITEURL":      "{base_url}/wp",
+			},
+		},
+	})
 	if err != nil {
 		panic(err)
 	}
@@ -104,6 +111,6 @@ func registerApplicationComponents(s *plugin.SDK, displayName, appService string
 	}
 	s.RegisterServiceComponents(plugin.ServiceComponentRegistryOptions{
 		DisplayName: displayName,
-		Components:  []corecomponent.ComposeServiceComponent{reverseProxy, uploadLimits, devMode},
+		Components:  []corecomponent.ComposeServiceComponent{ingress, devMode},
 	})
 }
