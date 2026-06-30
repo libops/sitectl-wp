@@ -80,6 +80,12 @@ func RegisterCommands(s *plugin.SDK) {
 	})
 	registerApplicationComponents(s, "WordPress", "wp")
 	s.RegisterHealthcheckRunner(wordpressHealthcheckRunner)
+	s.RegisterIngressRouteProvider(plugin.StandardComposeWebIngressRoutesWithOptions(plugin.StandardComposeWebIngressOptions{
+		AppService:     "wp",
+		Router:         "wordpress-web",
+		URLVariables:   []string{"WORDPRESS_HOME"},
+		HTTPSVariables: []string{"WORDPRESS_ENABLE_HTTPS"},
+	}))
 	registerWordPressCommands(s)
 }
 
