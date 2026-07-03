@@ -81,10 +81,8 @@ func RegisterCommands(s *plugin.SDK) {
 	registerApplicationComponents(s, "WordPress", "wp")
 	s.RegisterHealthcheckRunner(wordpressHealthcheckRunner)
 	s.RegisterIngressRouteProvider(plugin.StandardComposeWebIngressRoutesWithOptions(plugin.StandardComposeWebIngressOptions{
-		AppService:     "wp",
-		Router:         "wordpress-web",
-		URLVariables:   []string{"WORDPRESS_HOME"},
-		HTTPSVariables: []string{"WORDPRESS_ENABLE_HTTPS"},
+		AppService: "wp",
+		Router:     "wordpress-web",
 	}))
 	registerWordPressCommands(s)
 }
@@ -94,13 +92,7 @@ func registerApplicationComponents(s *plugin.SDK, displayName, appService string
 		AppService:      appService,
 		HTTPEntrypoint:  "web",
 		HTTPSEntrypoint: "websecure",
-		ServiceEnvTemplates: map[string]map[string]string{
-			appService: {
-				"WORDPRESS_ENABLE_HTTPS": "{https_enabled}",
-				"WORDPRESS_HOME":         "{base_url}",
-				"WORDPRESS_SITEURL":      "{base_url}/wp",
-			},
-		},
+		AppEnvDeletes:   []string{"WORDPRESS_ENABLE_HTTPS", "WORDPRESS_HOME", "WORDPRESS_SITEURL"},
 	})
 	if err != nil {
 		panic(err)
