@@ -46,12 +46,11 @@ Use [`sitectl image`](https://sitectl.libops.io/commands/image) for local image 
 sitectl image set --tag wp=nginx-1.30.3-php84
 ```
 
-Use [`sitectl set`](https://sitectl.libops.io/commands/set) and [`sitectl converge`](https://sitectl.libops.io/commands/converge) for component changes:
+Use [`sitectl set`](https://sitectl.libops.io/commands/set) for component changes; it updates component-owned files immediately:
 
 ```bash
 sitectl set ingress enabled --mode https-custom --domain wordpress.localhost
 sitectl set ingress enabled --trusted-ip 203.0.113.10/32 --max-upload-size 2G --upload-timeout 10m
-sitectl converge
 ```
 
 See the [WordPress plugin docs](https://sitectl.libops.io/plugins/wordpress) for WP-CLI, Composer, plugin/theme maintenance, lifecycle operations, and database helpers.

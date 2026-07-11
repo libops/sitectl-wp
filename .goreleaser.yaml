@@ -1,6 +1,7 @@
 version: 2
 before:
   hooks:
+    - ./scripts/check-sitectl-core-version.sh v0.37.0
     - go mod tidy
 builds:
   - binary: sitectl-wp
@@ -47,7 +48,6 @@ brews:
       name: homebrew
     dependencies:
       - name: "libops/homebrew/sitectl"
-      - name: "libops/homebrew/sitectl-triplet"
 nfpms:
   - id: sitectl-wp
     package_name: sitectl-wp
@@ -66,3 +66,13 @@ nfpms:
       - sitectl-wp
     dependencies:
       - sitectl
+    overrides:
+      deb:
+        dependencies:
+          - sitectl (>= 0.37.0)
+      rpm:
+        dependencies:
+          - sitectl >= 0.37.0
+      apk:
+        dependencies:
+          - sitectl>=0.37.0

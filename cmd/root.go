@@ -14,6 +14,12 @@ const (
 	defaultPath  = "./wp"
 )
 
+var wordpressDevModeVolumes = []string{
+	"./web/app/mu-plugins:/var/www/bedrock/web/app/mu-plugins:z,rw",
+	"./web/app/plugins:/var/www/bedrock/web/app/plugins:z,rw",
+	"./web/app/themes:/var/www/bedrock/web/app/themes:z,rw",
+}
+
 func createDefinition() plugin.CreateSpec {
 	return plugin.CreateSpec{
 		Name:                "default",
@@ -29,7 +35,7 @@ func createDefinition() plugin.CreateSpec {
 			"docker compose build",
 		},
 		Images: []plugin.ComposeImageSpec{
-			{Service: "wp", Image: "libops/wp:nginx-1.30.3-php84", BuildPolicy: plugin.BuildPolicyIfNotPresent},
+			{Service: "wp", Image: "libops/wp:nginx-1.30.3-php84", BuildPolicy: plugin.BuildPolicyAlways},
 		},
 		DockerComposeInit: []string{
 			"mkdir -p ./secrets",
@@ -53,18 +59,19 @@ func createDefinition() plugin.CreateSpec {
 			{Name: "wordpress-uploads"},
 		},
 		DockerComposeUp: []string{
-			"docker compose up --remove-orphans -d",
+			"docker compose up --remove-orphans --wait --wait-timeout 600 -d",
 		},
 		DockerComposeDown: []string{"docker compose down"},
 		DockerComposeRollout: []string{
-			"docker compose pull --ignore-buildable --quiet || docker compose pull --ignore-buildable || true",
+			"docker compose pull --ignore-buildable --quiet || docker compose pull --ignore-buildable",
 			"docker compose build --pull",
 			"mkdir -p ./secrets",
 			"docker compose run --rm init",
-			"docker compose up --remove-orphans --wait --pull missing --quiet-pull -d",
-			"docker compose exec -T wp wp --allow-root --path=/var/www/bedrock/web/wp core update-db || echo \"WordPress database update skipped or failed\"",
+			"docker compose up --remove-orphans --pull missing --quiet-pull -d",
+			"docker compose exec -T wp sh -c 'attempt=0; until test -f /installed; do attempt=$((attempt + 1)); if [ \"$attempt\" -ge 150 ]; then echo \"WordPress did not become ready for database migration within 5 minutes\" >&2; exit 1; fi; sleep 2; done'",
+			"docker compose exec -T wp wp --allow-root --path=/var/www/bedrock/web/wp core update-db",
 			"docker compose exec -T wp wp --allow-root --path=/var/www/bedrock/web/wp cache flush || true",
-			"docker compose up --remove-orphans --wait --pull missing --quiet-pull -d",
+			"docker compose up --remove-orphans --wait --wait-timeout 600 --pull missing --quiet-pull -d",
 		},
 	}
 }
@@ -101,10 +108,7 @@ func registerApplicationComponents(s *plugin.SDK, displayName, appService string
 	}
 	devMode, err := coredevmode.Component(coredevmode.Options{
 		AppService: appService,
-		Volumes: []string{
-			"./web/app/plugins:/var/www/bedrock/web/app/plugins:z,rw",
-			"./web/app/themes:/var/www/bedrock/web/app/themes:z,rw",
-		},
+		Volumes:    append([]string{}, wordpressDevModeVolumes...),
 	})
 	if err != nil {
 		panic(err)

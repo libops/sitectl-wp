@@ -40,14 +40,14 @@ func wpCLICommand(s *sitectlplugin.SDK) *cobra.Command {
 func wpComposerCommand(s *sitectlplugin.SDK) *cobra.Command {
 	return &cobra.Command{
 		Use:                "composer [Composer args...]",
-		Short:              "Run Composer in the active WordPress stack",
+		Short:              "Run Composer against the active WordPress checkout",
 		Args:               cobra.ArbitraryArgs,
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				args = []string{"install", "--no-interaction"}
 			}
-			return runWordPressExec(s, cmd, append([]string{"composer"}, args...)...)
+			return s.RunActiveComposeProjectCommand(cmd, wordpressComposerCommand(args...))
 		},
 	}
 }
@@ -214,6 +214,12 @@ func wordpressWPCLICommand(args ...string) string {
 	cliArgs := []string{"wp", "--allow-root", "--path=" + wordpressPath}
 	cliArgs = append(cliArgs, args...)
 	return sitectlplugin.DockerComposeExecCommand(wordpressService, cliArgs...)
+}
+
+// The running app is image-backed, so Composer must mutate a bind-mounted
+// checkout rather than the container filesystem that disappears on rebuild.
+func wordpressComposerCommand(args ...string) string {
+	return `docker compose run --rm --no-deps --user "$(id -u):$(id -g)" --volume "$PWD:/workspace:z" --workdir /workspace --entrypoint composer ` + wordpressService + " " + sitectlplugin.ShellJoin(args)
 }
 
 func runWordPressExec(s *sitectlplugin.SDK, cmd *cobra.Command, args ...string) error {
