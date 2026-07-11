@@ -67,7 +67,7 @@ func createDefinition() plugin.CreateSpec {
 			"docker compose build --pull",
 			"mkdir -p ./secrets",
 			"docker compose run --rm init",
-			"docker compose up --remove-orphans --pull missing --quiet-pull -d",
+			"docker compose up --remove-orphans --pull missing --quiet-pull -d wp",
 			"docker compose exec -T wp sh -c 'attempt=0; until test -f /installed; do attempt=$((attempt + 1)); if [ \"$attempt\" -ge 150 ]; then echo \"WordPress did not become ready for database migration within 5 minutes\" >&2; exit 1; fi; sleep 2; done'",
 			"docker compose exec -T wp wp --allow-root --path=/var/www/bedrock/web/wp core update-db",
 			"docker compose exec -T wp wp --allow-root --path=/var/www/bedrock/web/wp cache flush || true",

@@ -25,11 +25,26 @@ func TestCreateDefinitionLifecycleContract(t *testing.T) {
 		if !strings.Contains(command, "core update-db") {
 			continue
 		}
-		if strings.Contains(command, "||") || index < 2 || !strings.Contains(spec.DockerComposeRollout[index-1], "test -f /installed") || !strings.Contains(spec.DockerComposeRollout[index-1], "-ge 150") || strings.Contains(spec.DockerComposeRollout[index-2], "--wait") {
-			t.Fatalf("WordPress migration must fail hard after bounded readiness and a non-waiting start: %+v", spec.DockerComposeRollout)
+		if strings.Contains(command, "||") || index < 2 || !strings.Contains(spec.DockerComposeRollout[index-1], "test -f /installed") || !strings.Contains(spec.DockerComposeRollout[index-1], "-ge 150") {
+			t.Fatalf("WordPress migration must fail hard after bounded readiness: %+v", spec.DockerComposeRollout)
 		}
-		if index+2 >= len(spec.DockerComposeRollout) || !strings.Contains(spec.DockerComposeRollout[index+1], "cache flush") || !strings.Contains(spec.DockerComposeRollout[index+2], "--wait --wait-timeout 600") || strings.Contains(spec.DockerComposeRollout[index+2], "||") {
+		initialStart := spec.DockerComposeRollout[index-2]
+		wantInitialStart := "docker compose up --remove-orphans --pull missing --quiet-pull -d wp"
+		if initialStart != wantInitialStart ||
+			!strings.HasSuffix(initialStart, " -d wp") ||
+			strings.Contains(initialStart, "--wait") {
+			t.Fatalf("initial rollout start must target only WordPress without waiting: %q", initialStart)
+		}
+		if index+2 >= len(spec.DockerComposeRollout) || !strings.Contains(spec.DockerComposeRollout[index+1], "cache flush") {
 			t.Fatalf("cache flush and bounded fail-hard final health wait must follow migration: %+v", spec.DockerComposeRollout)
+		}
+		finalStart := spec.DockerComposeRollout[index+2]
+		wantFinalStart := "docker compose up --remove-orphans --wait --wait-timeout 600 --pull missing --quiet-pull -d"
+		if finalStart != wantFinalStart ||
+			!strings.Contains(finalStart, "--wait --wait-timeout 600") ||
+			!strings.HasSuffix(finalStart, " -d") ||
+			strings.Contains(finalStart, "||") {
+			t.Fatalf("final rollout start must wait for the full stack and fail hard: %q", finalStart)
 		}
 		foundMigration = true
 		break
