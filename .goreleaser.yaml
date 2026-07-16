@@ -43,6 +43,7 @@ brews:
   - name: sitectl-wp
     description: "A sitectl plugin for WordPress stacks"
     homepage: "https://github.com/libops/sitectl-wp"
+    url_template: "https://github.com/libops/sitectl-wp/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     license: MIT
     commit_author:
       name: sitectl-dev[bot]
