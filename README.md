@@ -6,7 +6,7 @@ Documentation: https://sitectl.libops.io/plugins/wordpress
 
 ## Requirements
 
-- [`sitectl`](https://sitectl.libops.io/install).
+- Stable [`sitectl`](https://sitectl.libops.io/install) v1.0.0 or newer; this plugin uses RPC protocol 1.
 - Docker with the Compose v2 plugin for local WordPress sites.
 - No additional app-plugin dependency beyond core `sitectl`.
 
