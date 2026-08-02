@@ -3,7 +3,7 @@ module github.com/libops/sitectl-wp
 go 1.26.1
 
 require (
-	github.com/libops/sitectl v1.6.1
+	github.com/libops/sitectl v1.6.2
 	github.com/spf13/cobra v1.10.2
 )
 
