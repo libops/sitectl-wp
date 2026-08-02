@@ -41,23 +41,6 @@ func createDefinition() plugin.CreateSpec {
 			"mkdir -p ./secrets",
 			"docker compose run --rm init",
 		},
-		InitArtifacts: []plugin.InitArtifact{
-			{Path: "secrets/DB_ROOT_PASSWORD"},
-			{Path: "secrets/WORDPRESS_DB_PASSWORD"},
-			{Path: "secrets/WORDPRESS_ADMIN_PASSWORD"},
-			{Path: "secrets/WORDPRESS_AUTH_KEY"},
-			{Path: "secrets/WORDPRESS_SECURE_AUTH_KEY"},
-			{Path: "secrets/WORDPRESS_LOGGED_IN_KEY"},
-			{Path: "secrets/WORDPRESS_NONCE_KEY"},
-			{Path: "secrets/WORDPRESS_AUTH_SALT"},
-			{Path: "secrets/WORDPRESS_SECURE_AUTH_SALT"},
-			{Path: "secrets/WORDPRESS_LOGGED_IN_SALT"},
-			{Path: "secrets/WORDPRESS_NONCE_SALT"},
-		},
-		InitVolumes: []plugin.InitVolume{
-			{Name: "mariadb-data"},
-			{Name: "wordpress-uploads"},
-		},
 		DockerComposeUp: []string{
 			"docker compose up --remove-orphans --wait --wait-timeout 600 -d",
 		},
