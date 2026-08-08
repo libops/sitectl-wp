@@ -99,6 +99,10 @@ run_healthcheck() {
 	HOME="${SITECTL_HOME}" sitectl healthcheck
 }
 
+run_verify() {
+	HOME="${SITECTL_HOME}" sitectl verify --strict --disposable
+}
+
 run_database_roundtrip() {
 	local dump="${TMP_DIR}/wordpress.sql"
 	HOME="${SITECTL_HOME}" sitectl wp db export "${dump}"
@@ -120,6 +124,7 @@ main() {
 	create_site
 	run_healthcheck
 	run_database_roundtrip
+	run_verify
 }
 
 main "$@"
