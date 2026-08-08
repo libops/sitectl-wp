@@ -9,7 +9,7 @@ import (
 
 const (
 	createRepo   = "https://github.com/libops/wp"
-	createBranch = "v1.0.0"
+	createBranch = "v1.1.0"
 	pluginName   = "wp"
 	defaultPath  = "./wp"
 )
