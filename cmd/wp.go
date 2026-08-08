@@ -102,16 +102,17 @@ func wpCoreCommand(s *sitectlplugin.SDK) *cobra.Command {
 }
 
 func wpComposerManagedUpdateCommand(s *sitectlplugin.SDK, kind string) *cobra.Command {
-	use := "update"
-	short := "Update Composer-managed WordPress core to an explicit constraint"
-	if kind == "plugin" {
+	var use, short string
+	switch kind {
+	case "plugin":
 		use = "update PLUGIN:CONSTRAINT..."
 		short = "Update Composer-managed WordPress plugin packages to explicit constraints"
-	} else if kind == "theme" {
+	case "theme":
 		use = "update THEME:CONSTRAINT..."
 		short = "Update Composer-managed WordPress theme packages to explicit constraints"
-	} else {
+	default:
 		use = "update CONSTRAINT"
+		short = "Update Composer-managed WordPress core to an explicit constraint"
 	}
 	return &cobra.Command{
 		Use:                use,
@@ -126,8 +127,8 @@ func wpComposerManagedUpdateCommand(s *sitectlplugin.SDK, kind string) *cobra.Co
 			if err := s.RunActiveComposeProjectCommand(cmd, wordpressComposerCommand(composerArgs...)); err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), "Composer manifest/lock update completed; review the diff, then rebuild and deploy.")
-			return nil
+			_, err = fmt.Fprintln(cmd.OutOrStdout(), "Composer manifest/lock update completed; review the diff, then rebuild and deploy.")
+			return err
 		},
 	}
 }
