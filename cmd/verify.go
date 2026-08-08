@@ -16,8 +16,9 @@ import (
 
 const (
 	wordpressRoot            = "/var/www/bedrock"
+	wordpressRuntimeUser     = "nginx"
 	wordpressLockedCoreProbe = `$lock = json_decode(file_get_contents("/var/www/bedrock/composer.lock"), true, 512, JSON_THROW_ON_ERROR); foreach (array_merge($lock["packages"] ?? [], $lock["packages-dev"] ?? []) as $package) { if (($package["name"] ?? "") === "roots/wordpress") { echo ltrim($package["version"] ?? "", "v"); exit(0); } } fwrite(STDERR, "roots/wordpress is absent from composer.lock\n"); exit(2);`
-	wordpressRuntimeProbe    = `echo wp_json_encode(["home" => home_url(), "siteurl" => site_url(), "uploads" => wp_upload_dir()["basedir"], "writable" => wp_is_writable(wp_upload_dir()["basedir"])]);`
+	wordpressRuntimeProbe    = `$uploads = wp_upload_dir(null, false); echo wp_json_encode(["home" => home_url(), "siteurl" => site_url(), "uploads" => $uploads["basedir"], "writable" => wp_is_writable($uploads["basedir"])]);`
 	wordpressMediaRoundTrip  = `tmp=/tmp/sitectl-verify-$$.png; attachment=; wpv() { wp --path=/var/www/bedrock/web/wp "$@"; }; cleanup() { if [ -n "$attachment" ]; then wpv post delete "$attachment" --force >/dev/null 2>&1 || true; fi; rm -f -- "$tmp"; }; trap cleanup EXIT INT TERM; php -r 'file_put_contents($argv[1], base64_decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="));' "$tmp"; attachment=$(wpv media import "$tmp" --porcelain); case "$attachment" in ''|*[!0-9]*) echo "media import returned an invalid attachment ID" >&2; exit 3 ;; esac; test "$(wpv post get "$attachment" --field=ID)" = "$attachment"; wpv post delete "$attachment" --force >/dev/null; attachment=; cleanup; trap - EXIT INT TERM; printf '%s\n' 'media round trip complete'`
 )
 
@@ -90,7 +91,7 @@ func runWordPressVerifyChecks(ctx context.Context, runtime wordpressVerifyRuntim
 	results = append(results, wordpressAdminResult(adminOutput, adminErr))
 
 	if disposable {
-		_, mediaErr := runtime.ExecCapture(ctx, []string{"s6-setuidgid", "nginx", "sh", "-ec", wordpressMediaRoundTrip})
+		_, mediaErr := runtime.ExecCapture(ctx, []string{"s6-setuidgid", wordpressRuntimeUser, "sh", "-ec", wordpressMediaRoundTrip})
 		if mediaErr != nil {
 			results = append(results, wordpressVerifyFailed("verify:wordpress:media-round-trip", mediaErr.Error(), "inspect uploads ownership and WordPress media handling"))
 		} else {
@@ -102,7 +103,7 @@ func runWordPressVerifyChecks(ctx context.Context, runtime wordpressVerifyRuntim
 }
 
 func wordpressWPArgv(args ...string) []string {
-	argv := []string{"wp", "--allow-root", "--path=" + wordpressPath}
+	argv := []string{"s6-setuidgid", wordpressRuntimeUser, "wp", "--path=" + wordpressPath}
 	return append(argv, args...)
 }
 

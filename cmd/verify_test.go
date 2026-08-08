@@ -93,6 +93,27 @@ func TestWordPressVerifyDisposableModeRunsMediaRoundTrip(t *testing.T) {
 	}
 }
 
+func TestWordPressVerifyRunsWPCLIAsServiceAccount(t *testing.T) {
+	t.Parallel()
+
+	argv := wordpressWPArgv("core", "version")
+	joined := strings.Join(argv, " ")
+	if !strings.HasPrefix(joined, "s6-setuidgid nginx wp ") {
+		t.Fatalf("WordPress verification does not run as the service account: %s", joined)
+	}
+	if strings.Contains(joined, "--allow-root") {
+		t.Fatalf("WordPress verification still requests root execution: %s", joined)
+	}
+}
+
+func TestWordPressRuntimeProbeDoesNotCreateUploadDirectories(t *testing.T) {
+	t.Parallel()
+
+	if !strings.Contains(wordpressRuntimeProbe, "wp_upload_dir(null, false)") {
+		t.Fatalf("runtime probe may create upload directories: %s", wordpressRuntimeProbe)
+	}
+}
+
 func TestWordPressVerifyRejectsEmptyCronSchedule(t *testing.T) {
 	t.Parallel()
 
