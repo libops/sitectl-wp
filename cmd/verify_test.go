@@ -23,6 +23,8 @@ func TestWordPressVerifyChecksApplicationAndLockBehavior(t *testing.T) {
 	runtime := fakeWordPressVerifyRuntime{run: func(argv []string) (string, error) {
 		joined := strings.Join(argv, " ")
 		switch {
+		case strings.HasPrefix(joined, "test -r "):
+			return "", nil
 		case strings.Contains(joined, "core version"):
 			return "7.0.2", nil
 		case strings.Contains(joined, wordpressLockedCoreScript):
@@ -62,6 +64,8 @@ func TestWordPressVerifyDisposableModeRunsMediaRoundTrip(t *testing.T) {
 	runtime := fakeWordPressVerifyRuntime{run: func(argv []string) (string, error) {
 		joined := strings.Join(argv, " ")
 		switch {
+		case strings.HasPrefix(joined, "test -r "):
+			return "", nil
 		case strings.Contains(joined, "core version"):
 			return "7.0.2", nil
 		case strings.Contains(joined, wordpressLockedCoreScript):
@@ -112,11 +116,28 @@ func TestWordPressRuntimeProbesExecuteMountedFiles(t *testing.T) {
 	for name, script := range map[string]string{
 		"locked core":      wordpressLockedCoreScript,
 		"runtime state":    wordpressRuntimeStateScript,
+		"media fixture":    wordpressMediaFixtureScript,
 		"media round trip": wordpressMediaRoundTripScript,
+		"wait installed":   wordpressWaitInstalledScript,
 	} {
 		if !strings.HasPrefix(script, "/usr/local/lib/sitectl/") {
 			t.Fatalf("%s probe is not a mounted script path: %s", name, script)
 		}
+	}
+}
+
+func TestWordPressVerifyExplainsMissingTemplatePrograms(t *testing.T) {
+	t.Parallel()
+
+	runtime := fakeWordPressVerifyRuntime{run: func(argv []string) (string, error) {
+		if strings.Contains(strings.Join(argv, " "), wordpressRuntimeStateScript) {
+			return "", errors.New("not found")
+		}
+		return "", nil
+	}}
+	results := runWordPressVerifyChecks(context.Background(), runtime, false)
+	if len(results) != 1 || results[0].Status != sitevalidate.StatusFailed || !strings.Contains(results[0].FixHint, "migrate the site checkout") {
+		t.Fatalf("missing template program did not produce a migration diagnostic: %+v", results)
 	}
 }
 

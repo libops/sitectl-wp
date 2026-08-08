@@ -35,7 +35,7 @@ func createDefinition() plugin.CreateSpec {
 			"docker compose build",
 		},
 		Images: []plugin.ComposeImageSpec{
-			{Service: "wp", Image: "libops/wp:nginx-1.30.3-php84", BuildPolicy: plugin.BuildPolicyAlways},
+			{Service: "wp", Image: "libops/wp:nginx-1.30.4-php84", BuildPolicy: plugin.BuildPolicyAlways},
 		},
 		DockerComposeInit: []string{
 			"mkdir -p ./secrets",
@@ -51,7 +51,7 @@ func createDefinition() plugin.CreateSpec {
 			"mkdir -p ./secrets",
 			"docker compose run --rm init",
 			"docker compose up --remove-orphans --pull missing --quiet-pull -d wp",
-			"docker compose exec -T wp sh -c 'attempt=0; until test -f /installed; do attempt=$((attempt + 1)); if [ \"$attempt\" -ge 150 ]; then echo \"WordPress did not become ready for database migration within 5 minutes\" >&2; exit 1; fi; sleep 2; done'",
+			"docker compose exec -T wp sh " + wordpressWaitInstalledScript,
 			"docker compose exec -T wp wp --allow-root --path=/var/www/bedrock/web/wp core update-db",
 			"docker compose exec -T wp wp --allow-root --path=/var/www/bedrock/web/wp cache flush || true",
 			"docker compose up --remove-orphans --wait --wait-timeout 600 --pull missing --quiet-pull -d",

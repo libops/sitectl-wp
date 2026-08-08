@@ -48,5 +48,4 @@ jobs:
       - name: Run create integration test
         run: make integration-test CREATE_DEFINITION=${{ matrix.create_definition }} CREATE_ARGS="${{ matrix.create_args }}"
         env:
-          EXPECTED_TEMPLATE_REVISION: priority-review-remediation
           TERM: xterm-256color

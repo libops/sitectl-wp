@@ -68,7 +68,7 @@ Every helper requires an explicit Composer constraint because the template delib
 Use [`sitectl image`](https://sitectl.libops.io/commands/image) for local image or build-arg overrides:
 
 ```bash
-sitectl image set --tag wp=nginx-1.30.3-php84
+sitectl image set --tag wp=nginx-1.30.4-php84
 ```
 
 Use [`sitectl set`](https://sitectl.libops.io/commands/set) for component changes; it updates component-owned files immediately:

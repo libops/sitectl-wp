@@ -10,7 +10,7 @@ import (
 func TestCreateDefinitionLifecycleContract(t *testing.T) {
 	t.Parallel()
 	spec := createDefinition()
-	if len(spec.Images) != 1 || spec.Images[0].Image != "libops/wp:nginx-1.30.3-php84" || spec.Images[0].BuildPolicy != plugin.BuildPolicyAlways {
+	if len(spec.Images) != 1 || spec.Images[0].Image != "libops/wp:nginx-1.30.4-php84" || spec.Images[0].BuildPolicy != plugin.BuildPolicyAlways {
 		t.Fatalf("unexpected WordPress image contract: %+v", spec.Images)
 	}
 	if len(spec.DockerComposeUp) != 1 || !strings.Contains(spec.DockerComposeUp[0], "--wait --wait-timeout 600") {
@@ -25,7 +25,7 @@ func TestCreateDefinitionLifecycleContract(t *testing.T) {
 		if !strings.Contains(command, "core update-db") {
 			continue
 		}
-		if strings.Contains(command, "||") || index < 2 || !strings.Contains(spec.DockerComposeRollout[index-1], "test -f /installed") || !strings.Contains(spec.DockerComposeRollout[index-1], "-ge 150") {
+		if strings.Contains(command, "||") || index < 2 || spec.DockerComposeRollout[index-1] != "docker compose exec -T wp sh "+wordpressWaitInstalledScript || strings.Contains(spec.DockerComposeRollout[index-1], "sh -c") {
 			t.Fatalf("WordPress migration must fail hard after bounded readiness: %+v", spec.DockerComposeRollout)
 		}
 		initialStart := spec.DockerComposeRollout[index-2]

@@ -19,7 +19,9 @@ const (
 	wordpressRuntimeUser          = "nginx"
 	wordpressLockedCoreScript     = "/usr/local/lib/sitectl/wordpress-locked-core.php"
 	wordpressRuntimeStateScript   = "/usr/local/lib/sitectl/wordpress-runtime-state.php"
+	wordpressMediaFixtureScript   = "/usr/local/lib/sitectl/wordpress-media-fixture.php"
 	wordpressMediaRoundTripScript = "/usr/local/lib/sitectl/wordpress-media-round-trip.sh"
+	wordpressWaitInstalledScript  = "/usr/local/lib/sitectl/wordpress-wait-installed.sh"
 )
 
 type wordpressVerifyRuntime interface {
@@ -65,6 +67,10 @@ func (r *wordpressVerifyRunner) Run(cmd *cobra.Command, _ *config.Context) ([]si
 }
 
 func runWordPressVerifyChecks(ctx context.Context, runtime wordpressVerifyRuntime, disposable bool) []sitevalidate.Result {
+	if missing := wordpressMissingTemplateProgram(ctx, runtime, disposable); missing != nil {
+		return []sitevalidate.Result{*missing}
+	}
+
 	capacity := 6
 	if disposable {
 		capacity++
@@ -84,7 +90,7 @@ func runWordPressVerifyChecks(ctx context.Context, runtime wordpressVerifyRuntim
 	cronOutput, cronErr := runtime.ExecCapture(ctx, wordpressWPArgv("cron", "event", "list", "--fields=hook,next_run_gmt", "--format=json", "--skip-plugins", "--skip-themes"))
 	results = append(results, wordpressCronResult(cronOutput, cronErr))
 
-	runtimeOutput, runtimeErr := runtime.ExecCapture(ctx, wordpressWPArgv("eval-file", wordpressRuntimeStateScript, "--skip-plugins", "--skip-themes"))
+	runtimeOutput, runtimeErr := runtime.ExecCapture(ctx, wordpressWPArgv("eval-file", wordpressRuntimeStateScript, "--use-include", "--skip-plugins", "--skip-themes"))
 	results = append(results, wordpressRuntimeResult(runtimeOutput, runtimeErr))
 
 	adminOutput, adminErr := runtime.ExecCapture(ctx, wordpressWPArgv("user", "get", "admin", "--field=ID", "--skip-plugins", "--skip-themes"))
@@ -100,6 +106,28 @@ func runWordPressVerifyChecks(ctx context.Context, runtime wordpressVerifyRuntim
 	}
 
 	return results
+}
+
+func wordpressMissingTemplateProgram(ctx context.Context, runtime wordpressVerifyRuntime, disposable bool) *sitevalidate.Result {
+	programs := []string{
+		wordpressLockedCoreScript,
+		wordpressRuntimeStateScript,
+		wordpressWaitInstalledScript,
+	}
+	if disposable {
+		programs = append(programs, wordpressMediaFixtureScript, wordpressMediaRoundTripScript)
+	}
+	for _, program := range programs {
+		if _, err := runtime.ExecCapture(ctx, []string{"test", "-r", program}); err != nil {
+			result := wordpressVerifyFailed(
+				"verify:wordpress:template-programs",
+				fmt.Sprintf("required template program %s is missing or unreadable", program),
+				"migrate the site checkout to the current versioned WordPress template before using this plugin release",
+			)
+			return &result
+		}
+	}
+	return nil
 }
 
 func wordpressWPArgv(args ...string) []string {
