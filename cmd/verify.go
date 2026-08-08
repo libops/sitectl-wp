@@ -15,11 +15,11 @@ import (
 )
 
 const (
-	wordpressRoot            = "/var/www/bedrock"
-	wordpressRuntimeUser     = "nginx"
-	wordpressLockedCoreProbe = `$lock = json_decode(file_get_contents("/var/www/bedrock/composer.lock"), true, 512, JSON_THROW_ON_ERROR); foreach (array_merge($lock["packages"] ?? [], $lock["packages-dev"] ?? []) as $package) { if (($package["name"] ?? "") === "roots/wordpress") { echo ltrim($package["version"] ?? "", "v"); exit(0); } } fwrite(STDERR, "roots/wordpress is absent from composer.lock\n"); exit(2);`
-	wordpressRuntimeProbe    = `$uploads = wp_upload_dir(null, false); echo wp_json_encode(["home" => home_url(), "siteurl" => site_url(), "uploads" => $uploads["basedir"], "writable" => wp_is_writable($uploads["basedir"])]);`
-	wordpressMediaRoundTrip  = `tmp=/tmp/sitectl-verify-$$.png; attachment=; wpv() { wp --path=/var/www/bedrock/web/wp "$@"; }; cleanup() { if [ -n "$attachment" ]; then wpv post delete "$attachment" --force >/dev/null 2>&1 || true; fi; rm -f -- "$tmp"; }; trap cleanup EXIT INT TERM; php -r 'file_put_contents($argv[1], base64_decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="));' "$tmp"; attachment=$(wpv media import "$tmp" --porcelain); case "$attachment" in ''|*[!0-9]*) echo "media import returned an invalid attachment ID" >&2; exit 3 ;; esac; test "$(wpv post get "$attachment" --field=ID)" = "$attachment"; wpv post delete "$attachment" --force >/dev/null; attachment=; cleanup; trap - EXIT INT TERM; printf '%s\n' 'media round trip complete'`
+	wordpressRoot                 = "/var/www/bedrock"
+	wordpressRuntimeUser          = "nginx"
+	wordpressLockedCoreScript     = "/usr/local/lib/sitectl/wordpress-locked-core.php"
+	wordpressRuntimeStateScript   = "/usr/local/lib/sitectl/wordpress-runtime-state.php"
+	wordpressMediaRoundTripScript = "/usr/local/lib/sitectl/wordpress-media-round-trip.sh"
 )
 
 type wordpressVerifyRuntime interface {
@@ -72,7 +72,7 @@ func runWordPressVerifyChecks(ctx context.Context, runtime wordpressVerifyRuntim
 	results := make([]sitevalidate.Result, 0, capacity)
 
 	coreOutput, coreErr := runtime.ExecCapture(ctx, wordpressWPArgv("core", "version", "--skip-plugins", "--skip-themes"))
-	lockOutput, lockErr := runtime.ExecCapture(ctx, []string{"php", "-r", wordpressLockedCoreProbe})
+	lockOutput, lockErr := runtime.ExecCapture(ctx, []string{"php", wordpressLockedCoreScript})
 	results = append(results, wordpressVersionResult(coreOutput, lockOutput, coreErr, lockErr))
 
 	databaseOutput, databaseErr := runtime.ExecCapture(ctx, wordpressWPArgv("db", "query", "SELECT CURRENT_USER();", "--skip-column-names", "--skip-plugins", "--skip-themes"))
@@ -84,14 +84,14 @@ func runWordPressVerifyChecks(ctx context.Context, runtime wordpressVerifyRuntim
 	cronOutput, cronErr := runtime.ExecCapture(ctx, wordpressWPArgv("cron", "event", "list", "--fields=hook,next_run_gmt", "--format=json", "--skip-plugins", "--skip-themes"))
 	results = append(results, wordpressCronResult(cronOutput, cronErr))
 
-	runtimeOutput, runtimeErr := runtime.ExecCapture(ctx, wordpressWPArgv("eval", wordpressRuntimeProbe, "--skip-plugins", "--skip-themes"))
+	runtimeOutput, runtimeErr := runtime.ExecCapture(ctx, wordpressWPArgv("eval-file", wordpressRuntimeStateScript, "--skip-plugins", "--skip-themes"))
 	results = append(results, wordpressRuntimeResult(runtimeOutput, runtimeErr))
 
 	adminOutput, adminErr := runtime.ExecCapture(ctx, wordpressWPArgv("user", "get", "admin", "--field=ID", "--skip-plugins", "--skip-themes"))
 	results = append(results, wordpressAdminResult(adminOutput, adminErr))
 
 	if disposable {
-		_, mediaErr := runtime.ExecCapture(ctx, []string{"s6-setuidgid", wordpressRuntimeUser, "sh", "-ec", wordpressMediaRoundTrip})
+		_, mediaErr := runtime.ExecCapture(ctx, []string{"s6-setuidgid", wordpressRuntimeUser, "sh", wordpressMediaRoundTripScript})
 		if mediaErr != nil {
 			results = append(results, wordpressVerifyFailed("verify:wordpress:media-round-trip", mediaErr.Error(), "inspect uploads ownership and WordPress media handling"))
 		} else {

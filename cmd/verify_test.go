@@ -25,7 +25,7 @@ func TestWordPressVerifyChecksApplicationAndLockBehavior(t *testing.T) {
 		switch {
 		case strings.Contains(joined, "core version"):
 			return "7.0.2", nil
-		case strings.Contains(joined, "composer.lock"):
+		case strings.Contains(joined, wordpressLockedCoreScript):
 			return "7.0.2", nil
 		case strings.Contains(joined, "SELECT CURRENT_USER()"):
 			return "wordpress@%", nil
@@ -33,7 +33,7 @@ func TestWordPressVerifyChecksApplicationAndLockBehavior(t *testing.T) {
 			return `{"name":"Library","namespaces":["wp/v2"]}`, nil
 		case strings.Contains(joined, "cron event list"):
 			return `[{"hook":"wp_version_check","next_run_gmt":"2026-08-08 12:00:00"}]`, nil
-		case strings.Contains(joined, "wp_upload_dir"):
+		case strings.Contains(joined, wordpressRuntimeStateScript):
 			return `{"home":"https://wp.example.org","siteurl":"https://wp.example.org/wp","uploads":"/var/www/bedrock/web/app/uploads","writable":true}`, nil
 		case strings.Contains(joined, "user get admin"):
 			return "1", nil
@@ -64,7 +64,7 @@ func TestWordPressVerifyDisposableModeRunsMediaRoundTrip(t *testing.T) {
 		switch {
 		case strings.Contains(joined, "core version"):
 			return "7.0.2", nil
-		case strings.Contains(joined, "composer.lock"):
+		case strings.Contains(joined, wordpressLockedCoreScript):
 			return "7.0.2", nil
 		case strings.Contains(joined, "SELECT CURRENT_USER()"):
 			return "wordpress@%", nil
@@ -72,11 +72,11 @@ func TestWordPressVerifyDisposableModeRunsMediaRoundTrip(t *testing.T) {
 			return `{"name":"Library","namespaces":["wp/v2"]}`, nil
 		case strings.Contains(joined, "cron event list"):
 			return `[{"hook":"wp_version_check","next_run_gmt":"2026-08-08 12:00:00"}]`, nil
-		case strings.Contains(joined, "wp_upload_dir"):
+		case strings.Contains(joined, wordpressRuntimeStateScript):
 			return `{"home":"http://localhost","siteurl":"http://localhost/wp","uploads":"/var/www/bedrock/web/app/uploads","writable":true}`, nil
 		case strings.Contains(joined, "user get admin"):
 			return "1", nil
-		case strings.Contains(joined, "media import"):
+		case strings.Contains(joined, wordpressMediaRoundTripScript):
 			mediaCommand = joined
 			return "media round trip complete", nil
 		default:
@@ -86,7 +86,7 @@ func TestWordPressVerifyDisposableModeRunsMediaRoundTrip(t *testing.T) {
 
 	results := runWordPressVerifyChecks(context.Background(), runtime, true)
 	assertAllWordPressVerifyOK(t, results, 7)
-	for _, required := range []string{"media import", "post delete", "trap", "rm -f"} {
+	for _, required := range []string{"s6-setuidgid nginx sh", wordpressMediaRoundTripScript} {
 		if !strings.Contains(mediaCommand, required) {
 			t.Fatalf("disposable media probe missing %q: %s", required, mediaCommand)
 		}
@@ -106,11 +106,17 @@ func TestWordPressVerifyRunsWPCLIAsServiceAccount(t *testing.T) {
 	}
 }
 
-func TestWordPressRuntimeProbeDoesNotCreateUploadDirectories(t *testing.T) {
+func TestWordPressRuntimeProbesExecuteMountedFiles(t *testing.T) {
 	t.Parallel()
 
-	if !strings.Contains(wordpressRuntimeProbe, "wp_upload_dir(null, false)") {
-		t.Fatalf("runtime probe may create upload directories: %s", wordpressRuntimeProbe)
+	for name, script := range map[string]string{
+		"locked core":      wordpressLockedCoreScript,
+		"runtime state":    wordpressRuntimeStateScript,
+		"media round trip": wordpressMediaRoundTripScript,
+	} {
+		if !strings.HasPrefix(script, "/usr/local/lib/sitectl/") {
+			t.Fatalf("%s probe is not a mounted script path: %s", name, script)
+		}
 	}
 }
 

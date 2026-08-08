@@ -20,7 +20,9 @@ jobs:
       matrix:
         include:
           - create_definition: default
-            create_args: ""
+            create_args: >-
+              --template-repo https://github.com/libops/wp
+              --template-branch priority-review-remediation
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
@@ -35,7 +37,7 @@ jobs:
         uses: libops/.github/.github/actions/install-sitectl@39f81174b7b899f66aee31035308e1d9b1f3e165 # main
         with:
           packages: sitectl
-          package-versions: sitectl=1.8.0
+          package-versions: sitectl=1.8.1
           allow-unversioned: false
 
       - name: setup git identity
@@ -46,4 +48,5 @@ jobs:
       - name: Run create integration test
         run: make integration-test CREATE_DEFINITION=${{ matrix.create_definition }} CREATE_ARGS="${{ matrix.create_args }}"
         env:
+          EXPECTED_TEMPLATE_REVISION: priority-review-remediation
           TERM: xterm-256color

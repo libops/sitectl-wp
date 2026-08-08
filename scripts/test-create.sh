@@ -10,6 +10,7 @@ PLUGIN_BINARY="sitectl-wp"
 SITE_DIR_NAME="wp"
 CREATE_DEFINITION="${CREATE_DEFINITION:-default}"
 CREATE_ARGS="${CREATE_ARGS:-}"
+EXPECTED_TEMPLATE_REVISION="${EXPECTED_TEMPLATE_REVISION:-v1.0.0}"
 SITECTL_CONTEXT="${SITECTL_CONTEXT:-integration-test}"
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." &>/dev/null && pwd)"
@@ -75,7 +76,7 @@ assert_template_lock() {
 	grep -Eq '^    commit: [0-9a-f]{40}([0-9a-f]{24})?$' "${lock}"
 	grep -Fxq "    repository: https://github.com/libops/${PLUGIN_NAME}" "${lock}"
 	grep -Eq '^        digest: sha256:[0-9a-f]{64}$' "${lock}"
-	grep -Fxq '    revision: v1.0.0' "${lock}"
+	grep -Fxq "    revision: ${EXPECTED_TEMPLATE_REVISION}" "${lock}"
 }
 
 create_site() {
