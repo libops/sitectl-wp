@@ -6,6 +6,78 @@ import (
 	"testing"
 )
 
+func TestComposerManagedUpdateArguments(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		kind string
+		args []string
+		want []string
+	}{
+		{name: "one plugin", kind: "plugin", args: []string{"akismet:5.8"}, want: []string{"require", "wpackagist-plugin/akismet:5.8", "--with-all-dependencies", "--no-interaction"}},
+		{name: "two themes", kind: "theme", args: []string{"twentytwentyfour:^1.6", "twentytwentythree:1.7"}, want: []string{"require", "wpackagist-theme/twentytwentyfour:^1.6", "wpackagist-theme/twentytwentythree:1.7", "--with-all-dependencies", "--no-interaction"}},
+		{name: "core", kind: "core", args: []string{"7.1.0"}, want: []string{"require", "roots/wordpress:7.1.0", "--with-all-dependencies", "--no-interaction"}},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := wordpressComposerUpdateArgs(test.kind, test.args)
+			if err != nil {
+				t.Fatalf("wordpressComposerUpdateArgs() error = %v", err)
+			}
+			if !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("wordpressComposerUpdateArgs() = %#v, want %#v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestComposerManagedUpdateArgumentsRejectWPCLIFlagsAndInvalidSlugs(t *testing.T) {
+	t.Parallel()
+
+	for _, args := range [][]string{{}, {"--minor"}, {"../../plugin:1.0"}, {"--all"}, {"akismet"}, {"akismet:not a constraint"}} {
+		if _, err := wordpressComposerUpdateArgs("plugin", args); err == nil {
+			t.Fatalf("wordpressComposerUpdateArgs(plugin, %q) error = nil", args)
+		}
+	}
+	for _, args := range [][]string{{}, {"--minor"}, {"7.0.2", "7.1.0"}} {
+		if _, err := wordpressComposerUpdateArgs("core", args); err == nil {
+			t.Fatalf("wordpressComposerUpdateArgs(core, %q) error = nil", args)
+		}
+	}
+}
+
+func TestRawWPCLIRejectsComposerOwnedCodeMutation(t *testing.T) {
+	t.Parallel()
+
+	for _, args := range [][]string{
+		{"plugin", "update", "--all"},
+		{"--url=https://example.org", "theme", "install", "example"},
+		{"plugin", "--quiet", "update", "akismet"},
+		{"theme", "--url=https://example.org", "delete", "example"},
+		{"core", "update"},
+		{"core", "--quiet", "download"},
+		{"plugin", "delete", "akismet"},
+	} {
+		if err := rejectComposerManagedWPCLIMutation(args); err == nil || !strings.Contains(err.Error(), "sitectl wp composer") {
+			t.Fatalf("rejectComposerManagedWPCLIMutation(%q) = %v, want Composer guidance", args, err)
+		}
+	}
+	for _, args := range [][]string{
+		{"plugin", "list"},
+		{"plugin", "activate", "akismet"},
+		{"core", "update-db"},
+		{"option", "get", "plugin", "update"},
+		{"eval", `echo "plugin update";`},
+	} {
+		if err := rejectComposerManagedWPCLIMutation(args); err != nil {
+			t.Fatalf("read/state WP-CLI command %q rejected: %v", args, err)
+		}
+	}
+}
+
 func TestWordPressComposerCommandPersistsIntoCheckout(t *testing.T) {
 	t.Parallel()
 

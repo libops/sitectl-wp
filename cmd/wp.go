@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	sitectlplugin "github.com/libops/sitectl/pkg/plugin"
@@ -13,6 +14,11 @@ const (
 	wordpressService = "wp"
 	wordpressPath    = "/var/www/bedrock/web/wp"
 	wordpressTmpDir  = "/tmp"
+)
+
+var (
+	wordpressPackageSlugPattern        = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
+	wordpressComposerConstraintPattern = regexp.MustCompile(`^[A-Za-z0-9.*^~<>=|,_-]+$`)
 )
 
 func registerWordPressCommands(s *sitectlplugin.SDK) {
@@ -32,6 +38,9 @@ func wpCLICommand(s *sitectlplugin.SDK) *cobra.Command {
 		Args:               cobra.ArbitraryArgs,
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := rejectComposerManagedWPCLIMutation(args); err != nil {
+				return err
+			}
 			return runWPCLI(s, cmd, args...)
 		},
 	}
@@ -55,22 +64,22 @@ func wpComposerCommand(s *sitectlplugin.SDK) *cobra.Command {
 func wpPluginCommand(s *sitectlplugin.SDK) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "plugin",
-		Short: "Manage WordPress plugins with WP-CLI",
+		Short: "Inspect WordPress plugins and update their Composer packages",
 	}
 	root.AddCommand(wpPassthroughCommand(s, "list [WP-CLI args...]", "List WordPress plugins", []string{"plugin", "list"}))
 	root.AddCommand(wpPassthroughCommand(s, "status [WP-CLI args...]", "Show WordPress plugin status", []string{"plugin", "status"}))
-	root.AddCommand(wpPassthroughCommand(s, "update [PLUGIN...] [WP-CLI args...]", "Update WordPress plugins", []string{"plugin", "update"}))
+	root.AddCommand(wpComposerManagedUpdateCommand(s, "plugin"))
 	return root
 }
 
 func wpThemeCommand(s *sitectlplugin.SDK) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "theme",
-		Short: "Manage WordPress themes with WP-CLI",
+		Short: "Inspect WordPress themes and update their Composer packages",
 	}
 	root.AddCommand(wpPassthroughCommand(s, "list [WP-CLI args...]", "List WordPress themes", []string{"theme", "list"}))
 	root.AddCommand(wpPassthroughCommand(s, "status [WP-CLI args...]", "Show WordPress theme status", []string{"theme", "status"}))
-	root.AddCommand(wpPassthroughCommand(s, "update [THEME...] [WP-CLI args...]", "Update WordPress themes", []string{"theme", "update"}))
+	root.AddCommand(wpComposerManagedUpdateCommand(s, "theme"))
 	return root
 }
 
@@ -88,7 +97,110 @@ func wpCoreCommand(s *sitectlplugin.SDK) *cobra.Command {
 		},
 	})
 	root.AddCommand(wpPassthroughCommand(s, "version [WP-CLI args...]", "Show the WordPress core version", []string{"core", "version"}))
+	root.AddCommand(wpComposerManagedUpdateCommand(s, "core"))
 	return root
+}
+
+func wpComposerManagedUpdateCommand(s *sitectlplugin.SDK, kind string) *cobra.Command {
+	use := "update"
+	short := "Update Composer-managed WordPress core to an explicit constraint"
+	if kind == "plugin" {
+		use = "update PLUGIN:CONSTRAINT..."
+		short = "Update Composer-managed WordPress plugin packages to explicit constraints"
+	} else if kind == "theme" {
+		use = "update THEME:CONSTRAINT..."
+		short = "Update Composer-managed WordPress theme packages to explicit constraints"
+	} else {
+		use = "update CONSTRAINT"
+	}
+	return &cobra.Command{
+		Use:                use,
+		Short:              short,
+		Args:               cobra.ArbitraryArgs,
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			composerArgs, err := wordpressComposerUpdateArgs(kind, args)
+			if err != nil {
+				return err
+			}
+			if err := s.RunActiveComposeProjectCommand(cmd, wordpressComposerCommand(composerArgs...)); err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "Composer manifest/lock update completed; review the diff, then rebuild and deploy.")
+			return nil
+		},
+	}
+}
+
+func wordpressComposerUpdateArgs(kind string, args []string) ([]string, error) {
+	if kind == "core" {
+		if len(args) != 1 || strings.HasPrefix(args[0], "-") || !wordpressComposerConstraintPattern.MatchString(args[0]) {
+			return nil, fmt.Errorf("provide one explicit WordPress core Composer constraint, for example: sitectl wp core update 7.0.2")
+		}
+		return []string{"require", "roots/wordpress:" + args[0], "--with-all-dependencies", "--no-interaction"}, nil
+	}
+
+	prefix := ""
+	switch kind {
+	case "plugin":
+		prefix = "wpackagist-plugin/"
+	case "theme":
+		prefix = "wpackagist-theme/"
+	default:
+		return nil, fmt.Errorf("unsupported Composer-managed WordPress package kind %q", kind)
+	}
+	if len(args) == 0 {
+		return nil, fmt.Errorf("provide at least one %s:constraint pair", kind)
+	}
+
+	composerArgs := []string{"require"}
+	for _, target := range args {
+		if strings.HasPrefix(target, "-") {
+			return nil, fmt.Errorf("%s update requires explicit package constraints, not WP-CLI option %q; use sitectl wp composer for advanced Composer options", kind, target)
+		}
+		slug, constraint, found := strings.Cut(target, ":")
+		if !found || strings.TrimSpace(constraint) == "" {
+			return nil, fmt.Errorf("provide %s %q with an explicit Composer constraint as %s:CONSTRAINT", kind, target, strings.ToUpper(kind))
+		}
+		if !wordpressPackageSlugPattern.MatchString(slug) {
+			return nil, fmt.Errorf("invalid WordPress %s slug %q", kind, slug)
+		}
+		if !wordpressComposerConstraintPattern.MatchString(constraint) {
+			return nil, fmt.Errorf("invalid Composer constraint %q for WordPress %s %q", constraint, kind, slug)
+		}
+		composerArgs = append(composerArgs, prefix+slug+":"+constraint)
+	}
+	composerArgs = append(composerArgs, "--with-all-dependencies", "--no-interaction")
+	return composerArgs, nil
+}
+
+func rejectComposerManagedWPCLIMutation(args []string) error {
+	positionals := make([]string, 0, 2)
+	for _, arg := range args {
+		trimmed := strings.TrimSpace(arg)
+		if trimmed == "" || strings.HasPrefix(trimmed, "-") {
+			continue
+		}
+		positionals = append(positionals, strings.ToLower(trimmed))
+		if len(positionals) == 2 {
+			break
+		}
+	}
+	if len(positionals) < 2 {
+		return nil
+	}
+	resource, action := positionals[0], positionals[1]
+	switch resource {
+	case "core":
+		if action == "update" || action == "download" {
+			return fmt.Errorf("WP-CLI cannot mutate Composer-managed WordPress core; use sitectl wp core update or sitectl wp composer")
+		}
+	case "plugin", "theme":
+		if action == "install" || action == "update" || action == "delete" {
+			return fmt.Errorf("WP-CLI cannot %s Composer-managed WordPress %s code; use sitectl wp %s update or sitectl wp composer", action, resource, resource)
+		}
+	}
+	return nil
 }
 
 func wpCacheCommand(s *sitectlplugin.SDK) *cobra.Command {

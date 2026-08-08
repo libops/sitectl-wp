@@ -6,7 +6,7 @@ Documentation: https://sitectl.libops.io/plugins/wordpress
 
 ## Requirements
 
-- Stable [`sitectl`](https://sitectl.libops.io/install) v1.0.0 or newer; this plugin uses RPC protocol 1.
+- [`sitectl`](https://sitectl.libops.io/install) v1.7.0 or newer provides the RPC verifier SDK; promotion must pin the first core release that also includes `verify --strict` semantics.
 - Docker with the Compose v2 plugin for local WordPress sites.
 - No additional app-plugin dependency beyond core `sitectl`.
 
@@ -38,7 +38,32 @@ Use [`sitectl healthcheck`](https://sitectl.libops.io/commands/healthcheck) and 
 ```bash
 sitectl healthcheck
 sitectl validate
+sitectl verify --strict
 ```
+
+## Behavioral verification
+
+`sitectl verify --strict` compares runtime WordPress core with `composer.lock`, rejects a root database identity, checks the REST `wp/v2` namespace, validates WP-Cron events, verifies Bedrock home/site URLs and writable uploads, and confirms the managed administrator exists. Production verification is read-only.
+
+Disposable CI may add a reversible media import/read/delete probe as the WordPress service account:
+
+```bash
+sitectl verify --strict --disposable
+```
+
+Never use `--disposable` for a retained customer site. The local verifier does not replace hosted acceptance for public DNS/TLS, external ingress, browser login, real mail delivery, externally triggered cron, or restore testing.
+
+## Composer-owned updates
+
+WordPress core, plugins, and themes are image content governed by `composer.json` and `composer.lock`. The named update helpers now update that checkout through Composer:
+
+```bash
+sitectl wp core update 7.0.2
+sitectl wp plugin update akismet:5.7
+sitectl wp theme update twentytwentyfour:^1.5
+```
+
+Every helper requires an explicit Composer constraint because the template deliberately pins exact package versions; silently selecting “latest” would weaken release reproducibility. Review and commit both Composer files, then rebuild and deploy. Raw `sitectl wp cli core update`, `plugin install|update|delete`, and `theme install|update|delete` fail with Composer guidance because those commands would mutate only the disposable running container. WP-CLI remains available for runtime state such as activation, users, options, cache, and database maintenance.
 
 Use [`sitectl image`](https://sitectl.libops.io/commands/image) for local image or build-arg overrides:
 
