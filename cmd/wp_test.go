@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+
+	sitectlplugin "github.com/libops/sitectl/pkg/plugin"
 )
 
 func TestComposerManagedUpdateArguments(t *testing.T) {
@@ -78,21 +81,51 @@ func TestRawWPCLIRejectsComposerOwnedCodeMutation(t *testing.T) {
 	}
 }
 
-func TestWordPressComposerCommandPersistsIntoCheckout(t *testing.T) {
+func TestWordPressComposerArgvPersistsIntoCheckout(t *testing.T) {
 	t.Parallel()
 
-	got := wordpressComposerCommand("require", "vendor/package:^1.2")
-	want := `docker compose run --rm --no-deps --user "$(id -u):$(id -g)" --volume "$PWD:/workspace:z" --workdir /workspace --entrypoint composer wp 'require' 'vendor/package:^1.2'`
-	if got != want {
-		t.Fatalf("wordpressComposerCommand() = %q, want %q", got, want)
+	host := sitectlplugin.ComposeProjectHost{
+		UID:                "1000",
+		GID:                "1001",
+		ProjectDir:         "/Users/operator/Library/Application Support/libops/templates/wordpress",
+		HasNumericIdentity: true,
 	}
-	for _, required := range []string{"docker compose run", `--volume "$PWD:/workspace:z"`, "--workdir /workspace", "--entrypoint composer", "'require' 'vendor/package:^1.2'"} {
-		if !strings.Contains(got, required) {
-			t.Fatalf("persistent Composer command is missing %q: %s", required, got)
+	got := wordpressComposerArgv(host, "require", "vendor/package:^1.2")
+	want := []string{
+		"docker", "compose", "run", "--rm", "--no-deps",
+		"--user", "1000:1001",
+		"--volume", "/Users/operator/Library/Application Support/libops/templates/wordpress:/workspace:z",
+		"--workdir", "/workspace",
+		"--entrypoint", "composer", "wp",
+		"require", "vendor/package:^1.2",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("wordpressComposerArgv() = %#v, want %#v", got, want)
+	}
+	if got[2] != "run" {
+		t.Fatalf("Composer mutation must use a one-off container, got %#v", got)
+	}
+}
+
+func TestWordPressComposerArgvOmitsPOSIXUserOnNativeWindows(t *testing.T) {
+	t.Parallel()
+
+	host := sitectlplugin.ComposeProjectHost{ProjectDir: `C:\Users\operator\wordpress`}
+	got := wordpressComposerArgv(host, "install", "--no-interaction")
+	want := []string{
+		"docker", "compose", "run", "--rm", "--no-deps",
+		"--volume", `C:\Users\operator\wordpress:/workspace:z`,
+		"--workdir", "/workspace",
+		"--entrypoint", "composer", "wp",
+		"install", "--no-interaction",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("wordpressComposerArgv() = %#v, want %#v", got, want)
+	}
+	for index, argument := range got {
+		if argument == "--user" {
+			t.Fatalf("native Windows Composer argv includes unsupported numeric user at index %d: %#v", index, got)
 		}
-	}
-	if strings.Contains(got, "docker compose exec") {
-		t.Fatalf("Composer mutation must not target the disposable running image: %s", got)
 	}
 }
 
@@ -103,10 +136,9 @@ func TestWordPressDBExportCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("wordpressDBExportCommands() error = %v", err)
 	}
-	want := []string{
-		"'mkdir' '-p' 'backups'",
-		"'docker' 'compose' 'exec' '-T' 'wp' 'wp' '--allow-root' '--path=/var/www/bedrock/web/wp' 'db' 'export' '/tmp/site.sql'",
-		"'docker' 'compose' 'cp' 'wp:/tmp/site.sql' './backups/site.sql'",
+	want := [][]string{
+		{"docker", "compose", "exec", "-T", "wp", "wp", "--allow-root", "--path=/var/www/bedrock/web/wp", "db", "export", "/tmp/site.sql"},
+		{"docker", "compose", "cp", "wp:/tmp/site.sql", "./backups/site.sql"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("wordpressDBExportCommands() = %#v, want %#v", got, want)
@@ -120,13 +152,35 @@ func TestWordPressDBImportCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("wordpressDBImportCommands() error = %v", err)
 	}
-	want := []string{
-		"'test' '-f' './backups/site.sql'",
-		"'docker' 'compose' 'cp' './backups/site.sql' 'wp:/tmp/site.sql'",
-		"'docker' 'compose' 'exec' '-T' 'wp' 'wp' '--allow-root' '--path=/var/www/bedrock/web/wp' 'db' 'import' '/tmp/site.sql'",
+	want := [][]string{
+		{"docker", "compose", "cp", "./backups/site.sql", "wp:/tmp/site.sql"},
+		{"docker", "compose", "exec", "-T", "wp", "wp", "--allow-root", "--path=/var/www/bedrock/web/wp", "db", "import", "/tmp/site.sql"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("wordpressDBImportCommands() = %#v, want %#v", got, want)
+	}
+}
+
+func TestWordPressDBCommandsUseOnlyCrossPlatformDockerArgv(t *testing.T) {
+	t.Parallel()
+
+	for _, build := range []func(string) ([][]string, error){wordpressDBExportCommands, wordpressDBImportCommands} {
+		commands, err := build("backups/site.sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, command := range commands {
+			if len(command) == 0 || command[0] != "docker" {
+				t.Fatalf("database command uses an operator-host-specific executable: %#v", command)
+			}
+		}
+	}
+	_, _, containerPath, err := wordpressDBPaths(filepath.Join("backups", "site.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if containerPath != "/tmp/site.sql" {
+		t.Fatalf("container database path = %q, want POSIX /tmp/site.sql", containerPath)
 	}
 }
 

@@ -76,6 +76,7 @@ assert_template_lock() {
 	grep -Fxq "    repository: https://github.com/libops/${PLUGIN_NAME}" "${lock}"
 	grep -Eq '^        digest: sha256:[0-9a-f]{64}$' "${lock}"
 	grep -Fxq '    revision: v1.0.0' "${lock}"
+	grep -Fxq '    ref: v1.1.1' "${lock}"
 }
 
 create_site() {
