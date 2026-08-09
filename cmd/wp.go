@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -56,7 +57,7 @@ func wpComposerCommand(s *sitectlplugin.SDK) *cobra.Command {
 			if len(args) == 0 {
 				args = []string{"install", "--no-interaction"}
 			}
-			return s.RunActiveComposeProjectCommand(cmd, wordpressComposerCommand(args...))
+			return runWordPressComposer(s, cmd, args...)
 		},
 	}
 }
@@ -124,7 +125,7 @@ func wpComposerManagedUpdateCommand(s *sitectlplugin.SDK, kind string) *cobra.Co
 			if err != nil {
 				return err
 			}
-			if err := s.RunActiveComposeProjectCommand(cmd, wordpressComposerCommand(composerArgs...)); err != nil {
+			if err := runWordPressComposer(s, cmd, composerArgs...); err != nil {
 				return err
 			}
 			_, err = fmt.Fprintln(cmd.OutOrStdout(), "Composer manifest/lock update completed; review the diff, then rebuild and deploy.")
@@ -245,7 +246,7 @@ func wpDBCommand(s *sitectlplugin.SDK) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return s.RunActiveComposeProjectCommandList(cmd, commands)
+			return s.RunActiveComposeProjectArgvList(cmd, commands)
 		},
 	})
 	root.AddCommand(&cobra.Command{
@@ -257,7 +258,7 @@ func wpDBCommand(s *sitectlplugin.SDK) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return s.RunActiveComposeProjectCommandList(cmd, commands)
+			return s.RunActiveComposeProjectArgvList(cmd, commands)
 		},
 	})
 	return root
@@ -283,27 +284,25 @@ func runWPCLI(s *sitectlplugin.SDK, cmd *cobra.Command, args ...string) error {
 	return runWordPressExec(s, cmd, cliArgs...)
 }
 
-func wordpressDBExportCommands(localPath string) ([]string, error) {
-	localPath, localDir, remotePath, err := wordpressDBPaths(localPath)
-	if err != nil {
-		return nil, err
-	}
-	return []string{
-		sitectlplugin.ShellJoin([]string{"mkdir", "-p", localDir}),
-		wordpressWPCLICommand("db", "export", remotePath),
-		sitectlplugin.ShellJoin([]string{"docker", "compose", "cp", wordpressService + ":" + remotePath, localPath}),
-	}, nil
-}
-
-func wordpressDBImportCommands(localPath string) ([]string, error) {
+func wordpressDBExportCommands(localPath string) ([][]string, error) {
 	localPath, _, remotePath, err := wordpressDBPaths(localPath)
 	if err != nil {
 		return nil, err
 	}
-	return []string{
-		sitectlplugin.ShellJoin([]string{"test", "-f", localPath}),
-		sitectlplugin.ShellJoin([]string{"docker", "compose", "cp", localPath, wordpressService + ":" + remotePath}),
-		wordpressWPCLICommand("db", "import", remotePath),
+	return [][]string{
+		wordpressWPCLIArgv("db", "export", remotePath),
+		{"docker", "compose", "cp", wordpressService + ":" + remotePath, localPath},
+	}, nil
+}
+
+func wordpressDBImportCommands(localPath string) ([][]string, error) {
+	localPath, _, remotePath, err := wordpressDBPaths(localPath)
+	if err != nil {
+		return nil, err
+	}
+	return [][]string{
+		{"docker", "compose", "cp", localPath, wordpressService + ":" + remotePath},
+		wordpressWPCLIArgv("db", "import", remotePath),
 	}, nil
 }
 
@@ -320,21 +319,39 @@ func wordpressDBPaths(localPath string) (string, string, string, error) {
 	if strings.TrimSpace(localDir) == "" {
 		localDir = "."
 	}
-	return localPath, localDir, filepath.Join(wordpressTmpDir, base), nil
+	return localPath, localDir, path.Join(wordpressTmpDir, base), nil
 }
 
-func wordpressWPCLICommand(args ...string) string {
+func wordpressWPCLIArgv(args ...string) []string {
 	cliArgs := []string{"wp", "--allow-root", "--path=" + wordpressPath}
 	cliArgs = append(cliArgs, args...)
-	return sitectlplugin.DockerComposeExecCommand(wordpressService, cliArgs...)
+	return sitectlplugin.DockerComposeExecArgv(wordpressService, cliArgs...)
 }
 
 // The running app is image-backed, so Composer must mutate a bind-mounted
 // checkout rather than the container filesystem that disappears on rebuild.
-func wordpressComposerCommand(args ...string) string {
-	return `docker compose run --rm --no-deps --user "$(id -u):$(id -g)" --volume "$PWD:/workspace:z" --workdir /workspace --entrypoint composer ` + wordpressService + " " + sitectlplugin.ShellJoin(args)
+func wordpressComposerArgv(host sitectlplugin.ComposeProjectHost, args ...string) []string {
+	argv := []string{
+		"docker", "compose", "run", "--rm", "--no-deps",
+	}
+	if host.HasNumericIdentity {
+		argv = append(argv, "--user", host.UID+":"+host.GID)
+	}
+	argv = append(argv,
+		"--volume", host.ProjectDir+":/workspace:z",
+		"--workdir", "/workspace",
+		"--entrypoint", "composer",
+		wordpressService,
+	)
+	return append(argv, args...)
+}
+
+func runWordPressComposer(s *sitectlplugin.SDK, cmd *cobra.Command, args ...string) error {
+	return s.RunActiveComposeProjectHostArgv(cmd, func(host sitectlplugin.ComposeProjectHost) []string {
+		return wordpressComposerArgv(host, args...)
+	})
 }
 
 func runWordPressExec(s *sitectlplugin.SDK, cmd *cobra.Command, args ...string) error {
-	return s.RunActiveComposeProjectCommand(cmd, sitectlplugin.DockerComposeExecCommand(wordpressService, args...))
+	return s.RunActiveComposeProjectArgv(cmd, sitectlplugin.DockerComposeExecArgv(wordpressService, args...))
 }

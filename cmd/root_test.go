@@ -10,7 +10,7 @@ import (
 func TestCreateDefinitionLifecycleContract(t *testing.T) {
 	t.Parallel()
 	spec := createDefinition()
-	if spec.DockerComposeRepo != createRepo || spec.DockerComposeBranch != "v1.1.0" {
+	if spec.DockerComposeRepo != createRepo || spec.DockerComposeBranch != "v1.1.1" {
 		t.Fatalf("unexpected versioned WordPress template contract: %s@%s", spec.DockerComposeRepo, spec.DockerComposeBranch)
 	}
 	if len(spec.Images) != 1 || spec.Images[0].Image != "libops/wp:nginx-1.30.4-php84" || spec.Images[0].BuildPolicy != plugin.BuildPolicyAlways {
